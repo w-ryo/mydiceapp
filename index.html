@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>完全版 3Dダイスアプリ</title>
     <style>
         /* --- 全体のレイアウト --- */
@@ -34,9 +34,11 @@
             backdrop-filter: blur(15px);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            width: max-content;
+            max-width: 90%;
         }
 
-        label { font-size: 14px; font-weight: bold; color: #e2e8f0; }
+        label { font-size: 14px; font-weight: bold; color: #e2e8f0; white-space: nowrap; }
         input[type="number"] {
             width: 60px;
             padding: 8px;
@@ -60,6 +62,7 @@
             cursor: pointer;
             transition: all 0.2s;
             box-shadow: 0 6px 15px rgba(108, 92, 231, 0.3);
+            white-space: nowrap;
         }
         button:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(108, 92, 231, 0.5); }
         button:active { transform: translateY(2px); }
@@ -172,10 +175,12 @@
             opacity: 0;
             transition: opacity 0.4s;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: max-content;
+            max-width: 85%;
         }
         #result-overlay.show { opacity: 1; }
         #total-num { font-size: 42px; font-weight: bold; color: #fdcb6e; }
-        #detail-list { font-size: 16px; color: #b2bec3; margin-top: 5px; }
+        #detail-list { font-size: 16px; color: #b2bec3; margin-top: 5px; word-wrap: break-word; }
 
     </style>
 </head>
@@ -228,7 +233,7 @@
 
         // 重なり防止のための初期グリッド計算
         const diceSize = 60;
-        const padding = 40;
+        const padding = 25; // 綺麗に整列させるためのサイコロ同士の余白
         const gridSize = diceSize + padding;
         const cols = Math.floor((window.innerWidth * 0.8) / gridSize);
         const rows = Math.floor((window.innerHeight * 0.7) / gridSize);
@@ -260,17 +265,23 @@
             container.appendChild(dice);
 
             // 重ならないマス（セル）をランダムに選んで初期位置を設定
-            const randomCellIdx = Math.floor(Math.random() * availableCells.length);
-            const cell = availableCells[randomCellIdx];
-            availableCells.splice(randomCellIdx, 1);
+            let startLeft, startTop;
+            if (availableCells.length > 0) {
+                const randomCellIdx = Math.floor(Math.random() * availableCells.length);
+                const cell = availableCells[randomCellIdx];
+                availableCells.splice(randomCellIdx, 1);
 
-            const cCol = cell % cols;
-            const cRow = Math.floor(cell / cols);
-            const xOffset = (window.innerWidth - (cols * gridSize)) / 2;
-            const yOffset = (window.innerHeight - (rows * gridSize)) / 2;
+                const cCol = cell % cols;
+                const cRow = Math.floor(cell / cols);
+                const xOffset = (window.innerWidth - (cols * gridSize)) / 2;
+                const yOffset = (window.innerHeight - (rows * gridSize)) / 2;
 
-            const startLeft = xOffset + (cCol * gridSize);
-            const startTop = yOffset + (cRow * gridSize);
+                startLeft = xOffset + (cCol * gridSize);
+                startTop = yOffset + (cRow * gridSize);
+            } else {
+                startLeft = Math.random() * (window.innerWidth - diceSize);
+                startTop = Math.random() * (window.innerHeight - diceSize - 150) + 50;
+            }
 
             container.style.left = startLeft + 'px';
             container.style.top = startTop + 'px';
@@ -285,23 +296,20 @@
             diceData.push({ container, dice, targetNum: rolledNum });
         }
 
-        // 2. 【大改良】サイコロを一斉に、かつ個別にランダムな軌道で跳ね回らせる（動く演出）
+        // 2. サイコロを一斉に、かつ個別にランダムな軌道で跳ね回らせる（動く演出）
         let ticks = 0;
         const maxTicks = 12; // 移動の激しさ・回数
         
         const rollInterval = setInterval(() => {
             diceData.forEach(item => {
-                // 画面内のどこかにランダム移動（ここを動かすことで「その場にとどまる」のを防ぐ）
                 const randomLeft = Math.random() * (window.innerWidth - 100) + 20;
-                const randomTop = Math.random() * (window.innerHeight - 150) + 50;
+                const randomTop = Math.random() * (window.innerHeight - 180) + 50;
                 item.container.style.left = randomLeft + 'px';
                 item.container.style.top = randomTop + 'px';
 
-                // サイコロ自身を3D空間でダイナミックにぐるぐる回転させる
                 const rx = Math.random() * 1080 - 540;
                 const ry = Math.random() * 1080 - 540;
                 const rz = Math.random() * 1080 - 540;
-                // 転がっている感を出すため、少し大きく浮かせる(scale)
                 item.container.style.transform = `scale3d(1.2, 1.2, 1.2)`;
                 item.dice.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg)`;
             });
@@ -310,18 +318,46 @@
             if (ticks >= maxTicks) {
                 clearInterval(rollInterval);
                 
-                // 3. 転がり終わったら、画面中央（センターゾーン）に引き寄せて綺麗に整列！
+                // 3. 【★大改造★】画面の幅をチェックして、はみ出る場合は自動で複数行に折りたたむ中央整列
                 setTimeout(() => {
                     const centerX = window.innerWidth / 2;
                     const centerY = window.innerHeight / 2;
                     
-                    // 横一列に並べるための全体幅の計算
-                    const totalWidth = (count * 60) + ((count - 1) * 25);
-                    const startX = centerX - (totalWidth / 2);
+                    // 画面の横幅（90%枠）に対して、1行に最大何個サイコロが入るかをリアルタイムに計算
+                    // 計算式: (画面幅 - サイコロ1個分の隙間) / グリッド幅
+                    const maxColsAllowed = Math.max(1, Math.floor((window.innerWidth * 0.9 + padding) / gridSize));
+                    
+                    // 1行の実際の列数（最大値を超えないように調整）
+                    const actualCols = Math.min(count, maxColsAllowed);
+                    // 必要になる行数（10個で最大3列なら、4行になる）
+                    const actualRows = Math.ceil(count / actualCols);
+                    
+                    // 整列エリア全体の横幅と縦高さを割り出す
+                    const totalResultWidth = (actualCols * diceSize) + ((actualCols - 1) * padding);
+                    const totalResultHeight = (actualRows * diceSize) + ((actualRows - 1) * padding);
+                    
+                    // 綺麗にど真ん中へ配置するための、左上の開始座標
+                    const startX = centerX - (totalResultWidth / 2);
+                    const startY = centerY - (totalResultHeight / 2);
 
                     diceData.forEach((item, index) => {
-                        const finalLeft = startX + (index * 85);
-                        const finalTop = centerY - 30; // 縦方向の中央
+                        // このサイコロが「何行目の何列目」になるかを計算
+                        const rRow = Math.floor(index / actualCols);
+                        const rCol = index % actualCols;
+
+                        // 基本の位置を決定
+                        let finalLeft = startX + (rCol * gridSize);
+                        let finalTop = startY + (rRow * gridSize);
+
+                        // 【超こだわり】もし最終行が中途半端に余ったら（10個で3-3-3-1の最後の1個など）、その行だけさらに中央に寄せる
+                        if (rRow === actualRows - 1) {
+                            const lastRowItemsCount = count % actualCols || actualCols;
+                            if (lastRowItemsCount < actualCols) {
+                                const lastRowWidth = (lastRowItemsCount * diceSize) + ((lastRowItemsCount - 1) * padding);
+                                const lastRowStartX = centerX - (lastRowWidth / 2);
+                                finalLeft = lastRowStartX + (rCol * gridSize);
+                            }
+                        }
 
                         // 中央の位置座標を上書き
                         item.container.style.left = finalLeft + 'px';
@@ -330,7 +366,7 @@
                         // 大きさを等倍に戻し、傾きをリセット
                         item.container.style.transform = `scale3d(1, 1, 1)`;
 
-                        // 確定した出目の角度を適用（ちょっとだけリアルな傾きz軸をランダムにプラス）
+                        // 確定した出目の角度を適用
                         const fRot = rotOfFace[item.targetNum];
                         const randomZ = Math.random() * 20 - 10; // -10度〜10度の自然なズレ
                         item.dice.style.transform = `rotateX(${fRot.x}deg) rotateY(${fRot.y}deg) rotateZ(${randomZ}deg)`;
@@ -346,9 +382,12 @@
 
                 }, 100);
             }
-        }, 120); // 120ミリ秒ごとに軌道を変えて転がす
+        }, 120);
     }
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
