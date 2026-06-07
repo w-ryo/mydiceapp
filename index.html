@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完全版 3Dダイスアプリ</title>
+    <style>
+        /* --- 全体のレイアウト --- */
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: radial-gradient(circle, #1a252f 0%, #0f171e 100%);
+            color: white;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+        }
+
+        /* --- 上部コントロールパネル --- */
+        .header-controls {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 12px 25px;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        label { font-size: 14px; font-weight: bold; color: #e2e8f0; }
+        input[type="number"] {
+            width: 60px;
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            text-align: center;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 25px;
+            background: linear-gradient(135deg, #ff7675, #6c5ce7);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 6px 15px rgba(108, 92, 231, 0.3);
+        }
+        button:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(108, 92, 231, 0.5); }
+        button:active { transform: translateY(2px); }
+        button:disabled { background: #636e72; box-shadow: none; cursor: not-allowed; }
+
+        /* --- 3Dキャンバス (画面全体) --- */
+        #main-stage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            perspective: 1500px;
+        }
+
+        /* --- 3Dサイコロの定義 --- */
+        .dice-container {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            transform-style: preserve-3d;
+            /* 中央集結時と移動時のスムーズなアニメーション用（cubic-bezierで物理的な摩擦を表現） */
+            transition: top 0.8s cubic-bezier(0.25, 1, 0.5, 1), 
+                        left 0.8s cubic-bezier(0.25, 1, 0.5, 1), 
+                        transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .dice {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+        }
+
+        /* サイコロの各面 */
+        .dice-face {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: #ffffff;
+            background: radial-gradient(circle, #ffffff 60%, #dfe6e9 100%);
+            border: 2px solid #ccc;
+            border-radius: 12px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.3);
+            display: grid;
+            padding: 6px;
+            box-sizing: border-box;
+            backface-visibility: hidden;
+        }
+
+        /* 3D配置 */
+        .front  { transform: rotateY(0deg) translateZ(30px); }
+        .back   { transform: rotateY(180deg) translateZ(30px); }
+        .right  { transform: rotateX(90deg) translateZ(30px); }
+        .left   { transform: rotateX(-90deg) translateZ(30px); }
+        .top    { transform: rotateY(90deg) translateZ(30px); }
+        .bottom { transform: rotateY(-90deg) translateZ(30px); }
+
+        /* --- ドット（サイコロの目）の配置 (1-6) --- */
+        .pip {
+            display: block;
+            width: 10px;
+            height: 10px;
+            background-color: #2d3436;
+            border-radius: 50%;
+            margin: auto;
+        }
+        /* 1の目 */
+        .front { display: flex; justify-content: center; align-items: center; }
+        .front .pip { width: 18px; height: 18px; background-color: #d63031; }
+
+        /* 2の目（斜め配置） */
+        .back { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+        .back .pip:nth-child(1) { grid-area: 1 / 3; }
+        .back .pip:nth-child(2) { grid-area: 3 / 1; }
+
+        /* 3の目 */
+        .right { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+        .right .pip:nth-child(1) { grid-area: 1 / 3; }
+        .right .pip:nth-child(2) { grid-area: 2 / 2; }
+        .right .pip:nth-child(3) { grid-area: 3 / 1; }
+
+        /* 4の目 */
+        .left { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+
+        /* 5の目 */
+        .top { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+        .top .pip:nth-child(1) { grid-area: 1 / 1; }
+        .top .pip:nth-child(2) { grid-area: 1 / 3; }
+        .top .pip:nth-child(3) { grid-area: 2 / 2; }
+        .top .pip:nth-child(4) { grid-area: 3 / 1; }
+        .top .pip:nth-child(5) { grid-area: 3 / 3; }
+
+        /* 6の目 */
+        .bottom { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
+
+        /* --- 下部リザルト表示 --- */
+        #result-overlay {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 15px 40px;
+            border-radius: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            opacity: 0;
+            transition: opacity 0.4s;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #result-overlay.show { opacity: 1; }
+        #total-num { font-size: 42px; font-weight: bold; color: #fdcb6e; }
+        #detail-list { font-size: 16px; color: #b2bec3; margin-top: 5px; }
+
+    </style>
+</head>
+<body>
+
+<div class="header-controls">
+    <label for="dice-count">個数 (1-10):</label>
+    <input type="number" id="dice-count" min="1" max="10" value="3">
+    <button id="roll-btn" onclick="startRoll()">サイコロを振る！</button>
+</div>
+
+<div id="main-stage">
+    </div>
+
+<div id="result-overlay">
+    合計: <span id="total-num">0</span>
+    <div id="detail-list"></div>
+</div>
+
+<script>
+    // 6面ダイスの各面が正面を向く3D角度
+    const rotOfFace = {
+        1: {x: 0,   y: 0},
+        2: {x: 0,   y: 180},
+        3: {x: -90, y: 0},
+        4: {x: 90,  y: 0},
+        5: {x: 0,   y: -90},
+        6: {x: 0,   y: 90}
+    };
+
+    function startRoll() {
+        const count = parseInt(document.getElementById('dice-count').value);
+        const stage = document.getElementById('main-stage');
+        const overlay = document.getElementById('result-overlay');
+        const btn = document.getElementById('roll-btn');
+
+        if (isNaN(count) || count < 1 || count > 10) {
+            alert('個数は1〜10個の間で設定してください。');
+            return;
+        }
+
+        // 画面状態のリセット
+        btn.disabled = true;
+        stage.innerHTML = '';
+        overlay.classList.remove('show');
+
+        let diceData = [];
+        let totalSum = 0;
+        let rolls = [];
+
+        // 重なり防止のための初期グリッド計算
+        const diceSize = 60;
+        const padding = 40;
+        const gridSize = diceSize + padding;
+        const cols = Math.floor((window.innerWidth * 0.8) / gridSize);
+        const rows = Math.floor((window.innerHeight * 0.7) / gridSize);
+        
+        let availableCells = [];
+        for (let i = 0; i < cols * rows; i++) availableCells.push(i);
+
+        // 1. サイコロの生成と「重ならない初期位置」への配置
+        for (let i = 0; i < count; i++) {
+            const container = document.createElement('div');
+            container.className = 'dice-container';
+
+            const dice = document.createElement('div');
+            dice.className = 'dice';
+
+            // 6面とドットの組み立て
+            const faces = ['front','back','right','left','top','bottom'];
+            const facePips = [1, 2, 3, 4, 5, 6]; 
+            faces.forEach((fName, idx) => {
+                const face = document.createElement('div');
+                face.className = `dice-face ${fName}`;
+                for (let p=0; p<facePips[idx]; p++) {
+                    const pip = document.createElement('span');
+                    pip.className = 'pip';
+                    face.appendChild(pip);
+                }
+                dice.appendChild(face);
+            });
+            container.appendChild(dice);
+
+            // 重ならないマス（セル）をランダムに選んで初期位置を設定
+            const randomCellIdx = Math.floor(Math.random() * availableCells.length);
+            const cell = availableCells[randomCellIdx];
+            availableCells.splice(randomCellIdx, 1);
+
+            const cCol = cell % cols;
+            const cRow = Math.floor(cell / cols);
+            const xOffset = (window.innerWidth - (cols * gridSize)) / 2;
+            const yOffset = (window.innerHeight - (rows * gridSize)) / 2;
+
+            const startLeft = xOffset + (cCol * gridSize);
+            const startTop = yOffset + (cRow * gridSize);
+
+            container.style.left = startLeft + 'px';
+            container.style.top = startTop + 'px';
+
+            stage.appendChild(container);
+
+            // 出目のランダム決定
+            const rolledNum = Math.floor(Math.random() * 6) + 1;
+            totalSum += rolledNum;
+            rolls.push(rolledNum);
+
+            diceData.push({ container, dice, targetNum: rolledNum });
+        }
+
+        // 2. 【大改良】サイコロを一斉に、かつ個別にランダムな軌道で跳ね回らせる（動く演出）
+        let ticks = 0;
+        const maxTicks = 12; // 移動の激しさ・回数
+        
+        const rollInterval = setInterval(() => {
+            diceData.forEach(item => {
+                // 画面内のどこかにランダム移動（ここを動かすことで「その場にとどまる」のを防ぐ）
+                const randomLeft = Math.random() * (window.innerWidth - 100) + 20;
+                const randomTop = Math.random() * (window.innerHeight - 150) + 50;
+                item.container.style.left = randomLeft + 'px';
+                item.container.style.top = randomTop + 'px';
+
+                // サイコロ自身を3D空間でダイナミックにぐるぐる回転させる
+                const rx = Math.random() * 1080 - 540;
+                const ry = Math.random() * 1080 - 540;
+                const rz = Math.random() * 1080 - 540;
+                // 転がっている感を出すため、少し大きく浮かせる(scale)
+                item.container.style.transform = `scale3d(1.2, 1.2, 1.2)`;
+                item.dice.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg)`;
+            });
+
+            ticks++;
+            if (ticks >= maxTicks) {
+                clearInterval(rollInterval);
+                
+                // 3. 転がり終わったら、画面中央（センターゾーン）に引き寄せて綺麗に整列！
+                setTimeout(() => {
+                    const centerX = window.innerWidth / 2;
+                    const centerY = window.innerHeight / 2;
+                    
+                    // 横一列に並べるための全体幅の計算
+                    const totalWidth = (count * 60) + ((count - 1) * 25);
+                    const startX = centerX - (totalWidth / 2);
+
+                    diceData.forEach((item, index) => {
+                        const finalLeft = startX + (index * 85);
+                        const finalTop = centerY - 30; // 縦方向の中央
+
+                        // 中央の位置座標を上書き
+                        item.container.style.left = finalLeft + 'px';
+                        item.container.style.top = finalTop + 'px';
+                        
+                        // 大きさを等倍に戻し、傾きをリセット
+                        item.container.style.transform = `scale3d(1, 1, 1)`;
+
+                        // 確定した出目の角度を適用（ちょっとだけリアルな傾きz軸をランダムにプラス）
+                        const fRot = rotOfFace[item.targetNum];
+                        const randomZ = Math.random() * 20 - 10; // -10度〜10度の自然なズレ
+                        item.dice.style.transform = `rotateX(${fRot.x}deg) rotateY(${fRot.y}deg) rotateZ(${randomZ}deg)`;
+                    });
+
+                    // 4. 整列が完了したら、結果テキストをふわっと表示
+                    setTimeout(() => {
+                        document.getElementById('total-num').innerText = totalSum;
+                        document.getElementById('detail-list').innerText = `内訳: [ ${rolls.join(', ')} ]`;
+                        overlay.classList.add('show');
+                        btn.disabled = false;
+                    }, 800);
+
+                }, 100);
+            }
+        }, 120); // 120ミリ秒ごとに軌道を変えて転がす
+    }
+</script>
+
+</body>
+</html>
